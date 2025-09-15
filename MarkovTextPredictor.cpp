@@ -1,11 +1,11 @@
-#include <iostream>
 #include <fstream>
-#include <string>
-#include <optional>
-#include <vector>
-#include <unordered_map>
-#include <random>
 #include <future>
+#include <iostream>
+#include <optional>
+#include <random>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // Random generator variables
 std::random_device rd;  // Non-deterministic seed
@@ -26,6 +26,8 @@ class Predictor {
 	std::unordered_map<std::string, std::vector<char>> model_;
 	int size_;
 	int hits_ = 0;
+    std::future<void> fut;
+
 public:
     Predictor(const std::string& text, int size) : size_(size), hits_(0) {
         auto buildModel = [this, &text, size]() {
@@ -39,8 +41,6 @@ public:
             };
         fut = std::async(std::launch::async, buildModel);
 	}
-
-    std::future<void> fut;
 
     std::optional<char> predictNextChar(const std::string& context) {
 		fut.wait(); // Ensure the model is built
@@ -62,6 +62,8 @@ public:
 	}
 
 	int getHits() const { return hits_; }
+
+    std::future<void>& get_future() { return fut; }
 };
 
 class MarkovTextPredictor {
@@ -78,7 +80,7 @@ public:
 
 		// Wait for all predictors to finish building their models  
         for (auto& predictor : predictors_) {
-            predictor.fut.wait();
+            predictor.get_future().wait();
 		}
     }
 
@@ -92,22 +94,19 @@ public:
     char predictNextChar(const std::string& context)
     {
 		// Iterate through predictors from largest to smallest
-        for (int size = predictors_.size()-1; size >= 0; --size) {
+        for (size_t size = predictors_.size()-1; ; --size) {
             auto prediction = predictors_[size].predictNextChar(context);
             if (prediction.has_value()) {
                 return prediction.value();
             }
 		}
-
-		// This should never happen since size 0 predictor always returns a character
-        return 'a';
 	}
 };
 
 int main(int argc, char *argv[]) // Fix parameter names and types
 {
     if (argc < 2) {
-        std::cout << "Usage: MarkovTextPredictor <input_file>\n";
+        std::cout << "Usage: MarkovTextPredictor <input_file> [<prompt>]\n";
         return 1;
     }
 
